@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <base target="_top">
+
+    <style>
+      html {
+        font-family: 'Inter', Arial, sans-serif;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      tr {
+        border: 1px solid rgb(212, 210, 210);
+        background-color: rgb(245, 245, 245);
+        border-left: none;
+        border-right: none;
+        transition: all .2s ease-in-out;
+      }
+
+      tr:hover {
+        background-color: rgb(230, 230, 230);
+      }
+
+      td {
+        padding: 8px 12px;
+        font-size: 13px;
+        vertical-align: middle;
+      }
+
+      button {
+        background-color: rgb(42, 93, 234);
+        border: none;
+        box-shadow: none;
+        padding: 12px 14px;
+        font-size: 14px;
+        color: #fff;
+        border-radius: 4px;
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        cursor: pointer;
+      }
+
+      .active {
+        background: rgb(42, 93, 234);
+        color: white;
+      }
+
+      .active:hover {
+        background: rgb(92, 133, 247);
+      }
+
+      .button:hover {
+        background-color: rgb(23, 93, 234);
+      }
+
+      .preview-icon-container {
+        text-align: center;
+      }
+
+      span {
+        font-size: 20px;
+      }
+
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+
+      button:disabled:hover {
+          background-color: #ccc;
+      }
+    </style>
+
+    <script>
+      async function buildUI() {
+        const templates = (await new Promise ((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler((data) => resolve(data))
+            .withFailureHandler((data) => reject(data))
+            .getCachedMailMergeTemplatesObj();
+        })).reverse();
+
+        const table = document.getElementById('templates');
+        const button = document.getElementById('select-template');
+
+        templates.forEach(({filename, url}, i) => {
+          const row = document.createElement('tr');
+          row.className = `row`;
+          table.appendChild(row);
+
+          const cell = document.createElement('td');
+          cell.textContent = filename;
+          cell.dataset.url = url;
+          cell.style.cursor = 'pointer';
+          cell.addEventListener('click', () => {
+            if (row.className.includes('active')) {
+              row.className = `row`;
+              button.disabled = true;
+            } else {
+              const trElements = document.querySelectorAll('tr');
+
+              trElements.forEach((tr) => {
+                tr.className = `row`;
+              });
+
+              row.className = `active row`;
+              button.disabled = false;
+            }
+          });
+          row.appendChild(cell);
+
+          const previewIconContainer = document.createElement('td');
+          previewIconContainer.className = 'preview-icon-container';
+          row.appendChild(previewIconContainer);
+
+          const previewIcon = document.createElement('span');
+          previewIcon.className = 'material-symbols-outlined';
+          previewIcon.style.cursor = 'pointer';
+          previewIcon.textContent = 'visibility';
+          previewIcon.addEventListener('click', () => {
+            google.script.run.showTemplate(templateName.textContent);
+          });
+          previewIconContainer.appendChild(previewIcon);
+        });
+
+        button.addEventListener('click', () => {
+          const activeRow = document.querySelector('.active');
+          const activeCell = activeRow.getElementsByTagName('td')[0];
+          const templateObj = {
+            filename: activeCell.innerText,
+            url: activeCell.dataset.url,
+          };
+
+          console.log(`templateObj:`);
+          console.log(templateObj);
+
+          google.script.run 
+            .withSuccessHandler(google.script.host.close())
+            .setMailMergeTemplateFromFrontend(templateObj);
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        const loading = document.getElementById('loading-banner');
+        const content = document.getElementById('content');
+
+        loading.style.display = 'block';
+        content.style.display = 'none';
+        
+        await buildUI();
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+      });
+    </script>
+  </head>
+  <body>
+    <div id="loading-banner">Loading...</div>
+    <div id="content" style="display:none;">
+      <table id="templates"></table>
+      <button class="button" id="select-template" disabled>Select</button>
+    </div>
+  </body>
+</html>
