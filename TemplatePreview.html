@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    <div id="template-preview"></div>
+    <button id="back"> Back </button>
+  </body>
+  <script>
+    var html = [];
+    html.push(<?= templateFormat ?>);
+    document.getElementById("template-preview").innerHTML = html.join("");
+
+    function returnToList(driveUrl) {
+      google.script.run.backToTemplates(driveUrl);
+    }
+
+    document.getElementById('back').addEventListener('click', function() {
+      google.script.run.withSuccessHandler(returnToList).getProperty('folder');
+    });
+  </script>
+</html>
+<style>
+    button {
+      background-color: rgb(42, 93, 234);
+      border: none;
+      box-shadow: none;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: #fff;
+      border-radius: 4px;
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      cursor: pointer;
+    }
+
+    p {
+      margin: 0px;
+    }
+</style>
