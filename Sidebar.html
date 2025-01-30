@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+  <script>
+    /* global document */
+    /* global google */
+
+    const DROP_DOWN_SPECIFY_TEXT = '* SPECIFY *';
+    const DROP_DOWN_SELECT_TEXT = 'Select';
+    const columnNames = [];
+    let emailTemplateUrl = '';
+
+    function checkInput() {
+      const userInput = document.getElementById(
+        'mail-merge-template-folder-url',
+      ).value;
+      const chooseTemplateButton = document.getElementById(
+        'mail-merge-choose-template',
+      );
+
+      if (userInput.trim() !== '') {
+        chooseTemplateButton.disabled = false;
+      } else {
+        chooseTemplateButton.disabled = true;
+      }
+    }
+
+    function initCheckbox(checkbox, state) {
+      if (state && state === true) {
+        checkbox.checked = true;
+      } else {
+        checkbox.checked = false;
+      }
+
+      checkbox.dispatchEvent(new Event('change'));
+    }
+
+    function initInputText(inputText, data) {
+      inputText.value = data ?? '';
+    }
+
+    function initDropdownWithSpecify(
+      selectDropdown,
+      selectData,
+      specifyInputText,
+      specifyData,
+    ) {
+      selectDropdown.value = selectData ?? DROP_DOWN_SELECT_TEXT;
+      initInputText(specifyInputText, specifyData);
+      selectDropdown.dispatchEvent(new Event('change'));
+    }
+
+    function initLoadEmailTemplate(
+      templateFolderURLInputText,
+      templateFolderURLData,
+      templateFilenameText,
+      templateURLData,
+    ) {
+      if (templateFolderURLData && templateURLData) {
+        templateFolderURLInputText.value = templateFolderURLData;
+
+        google.script.run
+          .withSuccessHandler((filename) => {
+            templateFilenameText.innerText = filename;
+          })
+          .getDocsName(templateURLData);
+
+        templateFolderURLInputText.dispatchEvent(
+          new Event('input', { bubbles: true }),
+        );
+      } else {
+        templateFolderURLInputText.value = '';
+        templateFilenameText.innerText = '';
+      }
+    }
+
+    function initEmailSenderDropdown(emailDropdown, data) {
+      if (data) {
+        emailDropdown.value = data;
+      } else {
+        const options = Array.from(emailDropdown.options);
+        emailDropdown.value = options[0].text;
+      }
+    }
+
+    function initCheckboxWithDropdownAndSpecify(
+      checkbox,
+      checkboxState,
+      selectDropdown,
+      selectData,
+      specifyDropdown,
+      specifyData,
+    ) {
+      initDropdownWithSpecify(
+        selectDropdown,
+        selectData,
+        specifyDropdown,
+        specifyData,
+      );
+
+      initCheckbox(checkbox, checkboxState);
+    }
+
+    function populateMailMergeSenderEmailAddresses(emailAddresses) {
+      const html = [];
+      const [me, ...others] = emailAddresses;
+
+      html.push(
+        `<option value="${DROP_DOWN_SELECT_TEXT}" disabled selected hidden>${DROP_DOWN_SELECT_TEXT}</option>`,
+      );
+      html.push(`<option value=${me}>Me (${me})</option>`);
+
+      others.forEach((addr) => {
+        html.push(`<option>${addr}</option>`);
+      });
+
+      document.getElementById('mail-merge-sender').innerHTML = html.join('');
+    }
+
+    function populateColumnSelectors(headerRowNames) {
+      const html = [];
+
+      html.push(
+        `<option value="${DROP_DOWN_SELECT_TEXT}" disabled selected hidden>${DROP_DOWN_SELECT_TEXT}</option>`,
+      );
+      html.push(`<option>${DROP_DOWN_SPECIFY_TEXT}</option>`);
+
+      headerRowNames.forEach((name) => {
+        html.push(`<option>${name}</option>`);
+      });
+
+      document.getElementById('doc-merge-title-dropdown').innerHTML = html.join('');
+      document.getElementById('mail-merge-subject-dropdown').innerHTML =
+        html.join('');
+      document.getElementById('mail-merge-recipient-dropdown').innerHTML =
+        html.join('');
+      document.getElementById('mail-merge-cc-dropdown').innerHTML = html.join('');
+      document.getElementById('mail-merge-bcc-dropdown').innerHTML = html.join('');
+    }
+
+    function updateSelectedTemplate(selectedTemplate) {
+      document.getElementById('mail-merge-template-filename').innerText =
+        selectedTemplate.templateName;
+      emailTemplateUrl = selectedTemplate.templateUrl;
+      const validateTagsButton = document.getElementById(
+        'mail-merge-validate-template-tags',
+      );
+      validateTagsButton.disabled = false;
+    }
+
+    function validateTags(templateTags) {
+      const noMatch = [];
+      templateTags.forEach((tag) => {
+        const matches = [];
+        columnNames.forEach((column) => {
+          if (tag === column) {
+            matches.push(tag);
+          }
+        });
+        if (matches.length === 0) {
+          noMatch.push(tag);
+        }
+      });
+      const noMatchString = noMatch.join(', ');
+      if (noMatch.length > 0) {
+        document.getElementById(
+          'mail-merge-template-tags-validation-details',
+        ).innerText =
+          `Warning! You have the following template tags that does not match to any of your column names: ${noMatchString}`;
+        document.getElementById(
+          'mail-merge-template-tags-validation-details',
+        ).className = 'c-error';
+      } else {
+        document.getElementById(
+          'mail-merge-template-tags-validation-details',
+        ).innerText = 'Success! All tags have matching data columns.';
+        document.getElementById(
+          'mail-merge-template-tags-validation-details',
+        ).className = 'c-success';
+      }
+    }
+
+    function startValidateTags() {
+      const folderUrl = document.getElementById(
+        'mail-merge-template-folder-url',
+      ).value;
+      const template = document.getElementById(
+        'mail-merge-template-filename',
+      ).innerText;
+      google.script.run
+        .withSuccessHandler(validateTags)
+        .getTemplateTags(folderUrl, template);
+    }
+
+    function showTextField(dropdownId, textFieldId, noteId = '') {
+      const dropdown = document.getElementById(dropdownId);
+      const textField = document.getElementById(textFieldId);
+      const noteElement = document.getElementById(noteId);
+
+      if (dropdown.value === DROP_DOWN_SPECIFY_TEXT) {
+        if (noteElement) {
+          noteElement.style.display = 'block';
+        }
+        textField.style.display = 'block';
+      } else {
+        if (noteElement) {
+          noteElement.style.display = 'none';
+        }
+        textField.style.display = 'none';
+      }
+    }
+
+    function showSnackbar(message, milliseconds = 3000) {
+      const snackbar = document.getElementById('snackbar');
+      snackbar.className = 'show';
+      snackbar.innerText = message;
+
+      setTimeout(() => {
+        snackbar.className = snackbar.className.replace('show', '');
+      }, milliseconds);
+    }
+    function showStatus(status) {
+      const processButton = document.getElementById('process-tasks');
+      processButton.className = 'process-button';
+      processButton.innerText = 'Process';
+      showSnackbar(status);
+    }
+
+    function addEventListeners() {
+      const docMergeEnable = document.getElementById('doc-merge-enable');
+      const docMergeDetailsPanel = document.getElementById(
+        'doc-merge-details-panel',
+      );
+      const docMergeTemplateURL = document.getElementById('doc-merge-template-url');
+      const docMergeOutputFolderURL = document.getElementById(
+        'doc-merge-output-folder-url',
+      );
+      const docMergeTitleDropdown = document.getElementById(
+        'doc-merge-title-dropdown',
+      );
+      const docMergeTitleInput = document.getElementById('doc-merge-title-input');
+      const docMergeAsPDF = document.getElementById('doc-merge-as-pdf');
+      const mailMergeEnable = document.getElementById('mail-merge-enable');
+      const mailMergeDetailsPanel = document.getElementById(
+        'mail-merge-details-panel',
+      );
+
+      const mailMergeTemplateFolderURL = document.getElementById(
+        'mail-merge-template-folder-url',
+      );
+      const mailMergeChooseTemplate = document.getElementById(
+        'mail-merge-choose-template',
+      );
+      const mailMergeTemplateFilename = document.getElementById(
+        'mail-merge-template-filename',
+      );
+      const mailMergeTemplateTagsValidationDetails = document.getElementById(
+        'mail-merge-template-tags-validation-details',
+      );
+      // const mailMergeLoadTemplate = document.getElementById(
+      //   'mail-merge-load-template',
+      // );
+
+      const mailMergeSender = document.getElementById('mail-merge-sender');
+      const mailMergeSubjectDropdown = document.getElementById(
+        'mail-merge-subject-dropdown',
+      );
+      const mailMergeSubjectInput = document.getElementById(
+        'mail-merge-subject-input',
+      );
+      const mailMergeRecipientDropdown = document.getElementById(
+        'mail-merge-recipient-dropdown',
+      );
+      const mailMergeRecipientInput = document.getElementById(
+        'mail-merge-recipient-input',
+      );
+      const mailMergeCCCheckbox = document.getElementById('mail-merge-cc-checkbox');
+      const mailMergeCCDropdown = document.getElementById('mail-merge-cc-dropdown');
+      const mailMergeCCInput = document.getElementById('mail-merge-cc-input');
+      const mailMergeBCCCheckbox = document.getElementById(
+        'mail-merge-bcc-checkbox',
+      );
+      const mailMergeBCCDropdown = document.getElementById(
+        'mail-merge-bcc-dropdown',
+      );
+      const mailMergeBCCInput = document.getElementById('mail-merge-bcc-input');
+      const mailMergeSendAsAttachmentCheckbox = document.getElementById(
+        'mail-merge-send-as-attachment-checkbox',
+      );
+
+      const processTasks = document.getElementById('process-tasks');
+
+      // -----------------------------------------------------------------------
+
+      docMergeEnable.addEventListener('change', () => {
+        if (docMergeEnable.checked) {
+          docMergeDetailsPanel.style.display = 'block';
+        } else {
+          docMergeDetailsPanel.style.display = 'none';
+        }
+      });
+
+      mailMergeEnable.addEventListener('change', () => {
+        if (mailMergeEnable.checked) {
+          mailMergeDetailsPanel.style.display = 'block';
+        } else {
+          mailMergeDetailsPanel.style.display = 'none';
+        }
+      });
+
+      mailMergeCCCheckbox.addEventListener('change', () => {
+        if (mailMergeCCCheckbox.checked) {
+          mailMergeCCDropdown.style.display = 'block';
+          mailMergeCCInput.style.display = 'block';
+        } else {
+          mailMergeCCDropdown.style.display = 'none';
+          mailMergeCCInput.style.display = 'none';
+        }
+      });
+
+      mailMergeBCCCheckbox.addEventListener('change', () => {
+        if (mailMergeBCCCheckbox.checked) {
+          mailMergeBCCDropdown.style.display = 'block';
+          mailMergeBCCInput.style.display = 'block';
+        } else {
+          mailMergeBCCDropdown.style.display = 'none';
+          mailMergeBCCInput.style.display = 'none';
+        }
+      });
+
+      mailMergeTemplateFolderURL.addEventListener('input', checkInput);
+
+      mailMergeChooseTemplate.addEventListener('click', () => {
+        google.script.run
+          // .withSuccessHandler(({filename, url}) => {
+          //   console.log(`template filename: ${filename}`);
+          //   console.log(`template url: ${url}`);
+          // })
+          .showMailMergeTemplateSelector(mailMergeTemplateFolderURL.value);
+      });
+
+      // mailMergeLoadTemplate.addEventListener('click', () => {
+      //   google.script.run
+      //     .withSuccessHandler(updateSelectedTemplate)
+      //     .loadSelectedTemplate();
+      // });
+
+      processTasks.addEventListener('click', () => {
+        processTasks.className = 'processing';
+        processTasks.innerText = 'Processing...';
+
+        const mergeConfig = {
+          // doc merge
+          docMergeEnable: docMergeEnable.checked,
+          docMergeTemplateURL: docMergeTemplateURL.value,
+          docMergeOutputFolderURL: docMergeOutputFolderURL.value,
+          docMergeTitleDropdown: docMergeTitleDropdown.value,
+          docMergeTitleInput: docMergeTitleInput.value,
+          docMergeAsPDFCheckbox: docMergeAsPDF.checked,
+
+          // mail merge
+          mailMergeEnable: mailMergeEnable.checked,
+          mailMergeTemplateFolderURL: mailMergeTemplateFolderURL.value,
+          mailMergeTemplateURL: emailTemplateUrl, // global var defined at top of <script>
+          mailMergeSender: mailMergeSender.value,
+          mailMergeSubjectDropdown: mailMergeSubjectDropdown.value,
+          mailMergeSubjectInput: mailMergeSubjectInput.value,
+          mailMergeRecipientDropdown: mailMergeRecipientDropdown.value,
+          mailMergeRecipientInput: mailMergeRecipientInput.value,
+          mailMergeCCCheckbox: mailMergeCCCheckbox.checked,
+          mailMergeCCDropdown: mailMergeCCDropdown.value,
+          mailMergeCCInput: mailMergeCCInput.value,
+          mailMergeBCCCheckbox: mailMergeBCCCheckbox.checked,
+          mailMergeBCCDropdown: mailMergeBCCDropdown.value,
+          mailMergeBCCInput: mailMergeBCCInput.value,
+          mailMergeSendAsAttachmentCheckbox:
+            mailMergeSendAsAttachmentCheckbox.checked,
+        };
+
+        console.log(`in process-tasks on-click event listener:`);
+        console.dir(mergeConfig);
+
+        google.script.run.withSuccessHandler(showStatus).runMerge(mergeConfig);
+      });
+
+      document.getElementById('clear-data').addEventListener('click', () => {
+        // doc merge
+        docMergeTemplateURL.value = '';
+        docMergeOutputFolderURL.value = '';
+        docMergeTitleInput.value = '';
+
+        // mail merge
+        mailMergeSender.value = DROP_DOWN_SELECT_TEXT;
+        mailMergeSubjectDropdown.value = '';
+        mailMergeSubjectInput.value = '';
+        mailMergeRecipientDropdown.value = DROP_DOWN_SELECT_TEXT;
+        mailMergeRecipientInput.value = '';
+        mailMergeCCDropdown.value = DROP_DOWN_SELECT_TEXT;
+        mailMergeCCInput.value = '';
+        mailMergeBCCDropdown.value = DROP_DOWN_SELECT_TEXT;
+        mailMergeBCCInput.value = '';
+
+        mailMergeTemplateFilename.innerText = '';
+        mailMergeTemplateTagsValidationDetails.innerText = '';
+        document.getElementById('status').innerText = '';
+        document.getElementById('mail-merge-template-folder-url').value = '';
+      });
+
+      document
+        .getElementById('settings')
+        .addEventListener('click', () => google.script.run.openSettings());
+    }
+
+    function loadPreviousMergeConfig(configData) {
+      console.log(`in loadPreviousMergeConfig:`);
+      console.dir(configData);
+
+      initCheckbox(
+        document.getElementById('doc-merge-enable'),
+        configData.docMergeEnable,
+      );
+
+      initInputText(
+        document.getElementById('doc-merge-template-url'),
+        configData.docMergeTemplateURL,
+      );
+
+      initInputText(
+        document.getElementById('doc-merge-output-folder-url'),
+        configData.docMergeOutputFolderURL,
+      );
+
+      initDropdownWithSpecify(
+        document.getElementById('doc-merge-title-dropdown'),
+        configData.docMergeTitleDropdown,
+        document.getElementById('doc-merge-title-input'),
+        configData.docMergeTitleInput,
+      );
+
+      initCheckbox(
+        document.getElementById('doc-merge-as-pdf'),
+        configData.docMergeAsPDFCheckbox,
+      );
+
+      initCheckbox(
+        document.getElementById('mail-merge-enable'),
+        configData.mailMergeEnable,
+      );
+
+      initLoadEmailTemplate(
+        document.getElementById('mail-merge-template-folder-url'),
+        configData.mailMergeTemplateFolderURL,
+        document.getElementById('mail-merge-template-filename'),
+        configData.mailMergeTemplateURL,
+      );
+
+      initEmailSenderDropdown(
+        document.getElementById('mail-merge-sender'),
+        configData.mailMergeSender,
+      );
+
+      initDropdownWithSpecify(
+        document.getElementById('mail-merge-subject-dropdown'),
+        configData.mailMergeSubjectDropdown,
+        document.getElementById('mail-merge-subject-input'),
+        configData.mailMergeSubjectInput,
+      );
+
+      initDropdownWithSpecify(
+        document.getElementById('mail-merge-recipient-dropdown'),
+        configData.mailMergeRecipientDropdown,
+        document.getElementById('mail-merge-recipient-input'),
+        configData.mailMergeRecipientInput,
+      );
+
+      initCheckboxWithDropdownAndSpecify(
+        document.getElementById('mail-merge-cc-checkbox'),
+        configData.mailMergeCCCheckbox,
+        document.getElementById('mail-merge-cc-dropdown'),
+        configData.mailMergeCCDropdown,
+        document.getElementById('mail-merge-cc-input'),
+        configData.mailMergeCCInput,
+      );
+
+      initCheckboxWithDropdownAndSpecify(
+        document.getElementById('mail-merge-bcc-checkbox'),
+        configData.mailMergeBCCCheckbox,
+        document.getElementById('mail-merge-bcc-dropdown'),
+        configData.mailMergeBCCDropdown,
+        document.getElementById('mail-merge-bcc-input'),
+        configData.mailMergeBCCInput,
+      );
+
+      initCheckbox(
+        document.getElementById('mail-merge-send-as-attachment-checkbox'),
+        configData.mailMergeSendAsAttachmentCheckbox,
+      );
+
+      showSnackbar('Loaded previous merge configuration.', 7000);
+    }
+
+    async function loadFrontendData() {
+      const headerRowNames = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler((data) => resolve(data))
+          .withFailureHandler((error) => reject(error))
+          .getDataSourceSheetHeaderNames();
+      });
+
+      const mailMergeSenderEmailAddresses = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler((data) => resolve(data))
+          .withFailureHandler((error) => reject(error))
+          .getMailMergeSenderEmailAddresses();
+      });
+
+      const previousMergeConfig = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler((data) => resolve(data))
+          .withFailureHandler((error) => reject(error))
+          .getPreviousMergeConfig();
+      });
+
+      populateColumnSelectors(headerRowNames);
+      populateMailMergeSenderEmailAddresses(mailMergeSenderEmailAddresses);
+      loadPreviousMergeConfig(previousMergeConfig);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      addEventListeners();
+      loadFrontendData();
+    });
+  </script>
+</head>
+
+<body>
+  <aside>
+    <div class="main">
+      <section class="pdf-generator">
+        <div class="checkbox-container">
+            <input type="checkbox" class="checkbox" id="doc-merge-enable">
+            <div class="checkbox-container__info">
+                <label for="doc-merge-enable">Document Merge</label>
+                <label for="doc-merge-enable" class="selector"></label>
+                <p class="description">Export data from the sheet to a file</p>
+            </div>
+        </div>
+        <div class="pdf-generator__details details" id="doc-merge-details-panel">
+            <ul class="detail-list">
+                <li class="detail-list__item">
+                    <label for="doc-merge-template-url">Template URL</label>
+                    <input class="text-field" type="text" id="doc-merge-template-url" placeholder="Enter template URL" />
+                </li>
+                <li class="detail-list__item">
+                    <label for="doc-merge-output-folder-url">Output Folder URL</label>
+                    <input class="text-field" type="text" id="doc-merge-output-folder-url" placeholder="Enter output folder URL" />
+                </li>
+                <li class="detail-list__item">
+                    <label for="doc-merge-title-input">Document Title</label>
+                    <select class="dropdown" id="doc-merge-title-dropdown" onchange="showTextField('doc-merge-title-dropdown', 'doc-merge-title-input')">
+                    </select>
+                    <input class="text-field" type="text" id="doc-merge-title-input" placeholder="Enter document title column" />
+                </li>
+                <div class="checkbox-container">
+                  <input type="checkbox" class="checkbox" id="doc-merge-as-pdf">
+                  <div class="checkbox-container__info">
+                      <label for="doc-merge-as-pdf">Merge as PDF</label>
+                  </div>
+              </div>
+            </ul>
+        </div>
+      </section>
+      <section class="email-sender">
+        <div class="checkbox-container">
+            <input type="checkbox" class="checkbox" id="mail-merge-enable" disabled/>
+            <div class="checkbox-container__info">
+                <label for="mail-merge-enable">Mail Merge</label>
+                <label for="mail-merge-enable" class="selector"></label>
+                <p class="description">Email merged files to recipients</p>
+            </div>
+        </div>
+        <div class="email-sender__details details" id="mail-merge-details-panel">
+            <ul class="detail-list">
+                <h3 class="h3">Enter Google Drive URL</h3>
+                <p class="description">Provide the Google Drive folder URL that contains your email templates.</p>
+                <input class="text-field" type="text" id="mail-merge-template-folder-url" data-url="" placeholder="Enter folder URL"/>
+                <h3 class="h3"> Select and load email template </h3>
+                <button role="button" id="mail-merge-choose-template" disabled class="button">Choose Template</button>
+                <!-- <button role="button" id="mail-merge-load-template" disabled class="button"> Load selected template </button> -->
+                <h3 class="h3"id="mail-merge-template-filename"></h3>
+                <button role="button" id="mail-merge-validate-template-tags" disabled class="button" onclick="startValidateTags()"> Validate template tags </button>
+                <p id="mail-merge-template-tags-validation-details"></p>
+                <li class="detail-list__item">
+                    <label for="email-sender">Email Sender</label>
+                    <select class="dropdown" id="mail-merge-sender">
+                    </select>
+                </li>
+                <li class="detail-list__item">
+                    <label for="mail-merge-subject-input">Subject</label>
+                    <select class="dropdown" id="mail-merge-subject-dropdown" onchange="showTextField('mail-merge-subject-dropdown', 'mail-merge-subject-input')">
+                    </select>
+                    <input class="text-field specify" type="text" id="mail-merge-subject-input" placeholder="Enter email subject" />
+                </li>
+                <li class="detail-list__item">
+                    <label for="mail-merge-recipient-input">Recipient</label>
+                    <select class="dropdown" id="mail-merge-recipient-dropdown" onchange="showTextField('mail-merge-recipient-dropdown', 'mail-merge-recipient-input')">
+                    </select>
+                    <input class="text-field specify" type="text" id="mail-merge-recipient-input" placeholder="Enter email recipients" />
+                </li class="detail-list__item">
+                <li class="detail-list__item">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="mail-merge-cc-checkbox" />
+                        <div class="checkbox-container__info">
+                            <label for="mail-merge-cc-checkbox">Cc</label>
+                        </div>
+                    </div>
+                    <select class="dropdown optional" id="mail-merge-cc-dropdown" onchange="showTextField('mail-merge-cc-dropdown', 'mail-merge-cc-input', 'cc-note')">
+                    </select>
+                    <input class="text-field cc-input" type="text" id="mail-merge-cc-input" placeholder="Enter cc email addresses" />
+                    <p class="description specify" id="cc-note">Separate the emails by a comma</p>
+                </li>
+                <li class="detail-list__item">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="mail-merge-bcc-checkbox" />
+                        <div class="checkbox-container__info">
+                            <label for="mail-merge-bcc-checkbox">Bcc</label>
+                        </div>
+                    </div>
+                    <select class="dropdown optional" id="mail-merge-bcc-dropdown" onchange="showTextField('mail-merge-bcc-dropdown', 'mail-merge-bcc-input', 'bcc-note')">
+                    </select>
+                    <input class="text-field bcc-input" type="text" id="mail-merge-bcc-input" placeholder="Enter bcc email addresses" />
+                    <p class="description specify" id="bcc-note">Separate the emails by a comma</p>
+                </li>
+                <li class="detail-list__item">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="mail-merge-send-as-attachment-checkbox" />
+                        <div class="checkbox-container__info send-pdf">
+                            <label for="mail-merge-send-as-attachment-checkbox">Send as Attachment</label>
+                            <p class="description">Send document as PDF attachment</p>
+                        </div>
+                    </div>
+                </li>
+            </ul>
+        </div>
+      </section>
+    </div>
+    <div class="bottom">
+      <div class="button-container">
+        <span class="material-symbols-outlined" style="cursor: pointer; color: gray;" id="settings">settings</span>
+        <button class="process-button" role="button" id="process-tasks">Process</button>
+        <button class="clear-button" role="button" id="clear-data">Clear Data</button>
+        <div id="snackbar" class="snackbar"></div>
+    </div>
+    </div>
+  </aside>
+</body>
+</html>
+
+<style>
+  p,h1,h2,h3 {
+    margin: 0;
+    padding: 0;
+  }
+
+  .h1 {
+      font-weight: 600;
+      font-size: 20px;
+  }
+
+  .h2 {
+      font-size: 18px;
+      font-weight: 500;
+  }
+
+  .h3 {
+      font-weight: 600;
+      font-size: 13px;
+  }
+
+  .selected-template {
+      font-weight: 400;
+      font-size: 13px;
+  }
+
+  p {
+    font-size: 13px;
+    color: #1b1b1b;
+  }
+
+  .c-error {
+    color: rgb(231, 28, 28);
+  }
+
+  .c-success {
+    color: rgb(50, 205, 50);
+  }
+
+  .c-accent {
+    color: rgb(42, 93, 234);
+  }
+
+  html {
+      font-family: 'Inter', Arial, Helvetica, sans-serif;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  aside {
+      display: flex;
+      justify-content: center;
+      height: calc(100vh - 12px);
+  }
+
+  .main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: calc(100vh - 160px);
+    width: 100%;
+    overflow-y: scroll;
+    padding: 8px
+  }
+
+  .bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px;
+    background: #FAFAFA;
+    border-top: 1px solid #DADADA;
+  }
+
+  .pdf-generator,
+  .email-sender {
+    border: 1px solid rgb(200, 200, 200);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  section > .checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-block: 12px;
+    padding-inline: 8px;
+    background-color: rgb(244, 244, 244);
+    transition: all .15s ease-in-out ;
+    position: relative;
+  }
+
+  section > .checkbox-container:hover {
+    background: rgb(211, 211, 211);
+  }
+
+  .checkbox-container > label,
+  .checkbox-container .checkbox-container__info label {
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .checkbox-container input[type="checkbox"] {
+    margin-right: 8px;
+    cursor: pointer;
+  }
+
+  .checkbox-container .checkbox-container__info {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .checkbox-container .checkbox-container__info .selector {
+    color: red !important;
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    top: 0;
+  }
+
+  .checkbox-container .checkbox-container__info p {
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+    color: #a6a6a6;
+  }
+
+  .checkbox {
+    width: 20px;
+    height: 20px;
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 24px;
+    background-color: rgb(233, 233, 233);
+    border-top: 1px solid rgb(200, 200, 200);
+  }
+
+  .detail-list__item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .detail-list__item > label {
+    color: rgb(58, 58, 58);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .description {
+    font-size: 11px;
+    margin: 0;
+    color: #a6a6a6;
+  }
+
+  input[type=text] {
+    transition: all 0.2s ease-in-out;
+    outline: none;
+    padding: 3px 0px 3px 3px;
+    margin: 5px 1px 3px 0px;
+    border: 1px solid #DDDDDD;
+    height: 20px;
+    padding: 8px 12px;
+    border-radius: 4px;
+  }
+
+  select {
+    transition: all 0.2s ease-in-out;
+    outline: none;
+    padding: 3px 0px 3px 3px;
+    margin: 5px 1px 3px 0px;
+    border: 1px solid #DDDDDD;
+    height: 20px;
+    padding: 8px 12px;
+    border-radius: 4px;
+  }
+
+  input[type=text]:focus {
+    box-shadow: 0 0 5px rgb(71, 114, 233);
+    margin: 5px 1px 3px 0px;
+    border: 1px solid rgb(71, 114, 233);
+  }
+
+  select[type=text]:focus {
+    box-shadow: 0 0 5px rgb(71, 114, 233);
+    margin: 5px 1px 3px 0px;
+    border: 1px solid rgb(71, 114, 233);
+  }
+
+  .details {
+    display: none;
+  }
+
+  .cc-input,
+  .bcc-input,
+  .optional {
+    display: none;
+  }
+
+  .specify {
+    display: none;
+  }
+
+  .cc-input > input[type="text"],
+  .bcc-input > input[type="text"] {
+    width: auto;
+  }
+
+  .button {
+    border: none;
+    box-shadow: none;
+    background-color: rgb(42, 93, 234);
+    width: 100%;
+    min-width: 120px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    transition: all ease-in-out .2s;
+  }
+
+  .button:hover {
+    background-color: rgb(23, 55, 145);
+  }
+
+  .button-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .process-button {
+    background-color: rgb(42, 93, 234);
+    box-sizing: border-box;
+    border-style: none;
+    border-radius: 4px;
+    color: #FFFFFF;
+    font-size: 16px;
+    padding: 12px 24px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s ease-in-out;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  .processing {
+    background-color: rgb(50, 205, 50);
+    box-sizing: border-box;
+    border-style: none;
+    border-radius: 4px;
+    color: #FFFFFF;
+    font-size: 16px;
+    padding: 12px 24px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s ease-in-out;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  .process-button:hover {
+    background-color: rgb(23, 55, 145);
+  }
+
+  .start-process {
+    background-color: green;
+  }
+
+  .clear-button {
+    box-sizing: border-box;
+    border-style: none;
+    border-radius: 4px;
+    color: #000000;
+    font-size: 16px;
+    padding: 12px 24px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s ease-in-out;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    width:100%;
+  }
+
+  .clear-button:hover {
+    background-color: #cfd1d1;
+  }
+
+  .dropdown {
+    height: 36px;
+    width: auto;
+    padding: 8px 12px;
+    border-radius: 4px;
+  }
+
+  button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+
+  button:disabled:hover {
+    background-color: #ccc;
+  }
+
+  //snackbar css
+  #snackbar {
+    visibility: hidden;
+    width: 268px;
+    background-color: #333333b5;
+    color: #fff;
+    text-align: center; 
+    border-radius: 2px; 
+    padding: 8px;
+    position: fixed; 
+    z-index: 1;
+    bottom: 148px;
+    display:flex;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  #snackbar.show {
+    visibility: visible;
+    -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
+    animation: fadein 0.5s, fadeout 0.5s 2.5s;
+  }
+
+  @-webkit-keyframes fadein {
+    from {bottom: 0; opacity: 0;}
+    to {bottom: 148px; opacity: 1;}
+  }
+
+  @keyframes fadein {
+    from {bottom: 0; opacity: 0;}
+    to {bottom: 148px; opacity: 1;}
+  }
+
+  @-webkit-keyframes fadeout {
+    from {bottom: 148px; opacity: 1;}
+    to {bottom: 0; opacity: 0;}
+  }
+
+  @keyframes fadeout {
+    from {bottom: 148px; opacity: 1;}
+    to {bottom: 0; opacity: 0;}
+  }
+</style>
