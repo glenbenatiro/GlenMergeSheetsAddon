@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+  </head>
+  <body>
+    <table class="table">
+      <tr>
+        <th class="header-text">
+          <label for="sheet-columns">Column</label>
+          <select class="dropdown" id="sheet-columns" onchange="checkStatus()">
+          </select>
+        </th>
+        <th class="header-text">
+          <label for="operators" >Operator</label>
+          <select class="dropdown" id="operators" onchange="checkStatus()">
+          </select>
+        </th>
+        <th class="header-text">
+          <label for="string-to-comp">Row Content</label>
+          <input class="text-field" type="text" id="string-to-comp" disabled/>
+        </th>
+        <th class="header-icon add">
+          <button role="button" id="add-criteria" class="button" onclick="loadRowFilters()">Add</button>
+        </th>
+      </tr>
+    </table>
+    <p class="c-error" id="error"></p>
+    <table id='added-settings'>
+      <tr>
+        <th class="header-text">
+          <p>Criteria Column</p>
+        </th>
+        <th class="header-text">
+          <p>Operator</p>
+        </th>
+        <th class="header-text">
+          <p>Row Content</p>
+        </th>
+        <th class="header-icon"></th>
+      </tr>
+    </table>
+    <!-- <button role="button" id="reset" class="button">Reset</button> -->
+    <button role="button" id="save" class="button" onclick="saveSettings()">Save</button>
+  </body>
+  <script>
+    /* global document */
+    /* global google */
+
+    let ctr = 1; // data rows counter
+
+    function populateColumnSelectors(headerRowNames) {
+      const html = [];
+
+      html.push(`<option value="Select" disabled selected hidden>Select</option>`);
+
+      headerRowNames.forEach((name) => {
+        html.push(`<option>${name}</option>`);
+      });
+
+      document.getElementById('sheet-columns').innerHTML = html.join('');
+    }
+
+    function removeRow(span) {
+      const row = span.parentNode.parentNode;
+      const table = row.parentNode;
+
+      table.removeChild(row);
+    }
+
+    function addRow(criteriaColumn, operator, rowContent) {
+      const row = document.createElement('tr');
+      row.id = `setting-${ctr}`;
+      row.className = `setting${ctr}`;
+      document.getElementById('added-settings').appendChild(row);
+
+      const criteria = document.createElement('td');
+      criteria.className = 'criteria';
+      criteria.id = `criteria-${ctr}`;
+      criteria.textContent = criteriaColumn;
+      document.getElementById(row.id).appendChild(criteria);
+
+      const operatorColumn = document.createElement('td');
+      operatorColumn.className = 'operator-column';
+      operatorColumn.id = `operator-column-${ctr}`;
+      operatorColumn.textContent = operator;
+      document.getElementById(row.id).appendChild(operatorColumn);
+
+      const content = document.createElement('td');
+      content.className = 'content';
+      content.id = `row-content-${ctr}`;
+      content.textContent = rowContent;
+      document.getElementById(row.id).appendChild(content);
+
+      const iconContainer = document.createElement('td');
+      iconContainer.className = 'icon-container';
+      iconContainer.id = `icon-container-${ctr}`;
+      document.getElementById(row.id).appendChild(iconContainer);
+
+      const icon = document.createElement('span');
+      icon.id = `icon-${ctr}`;
+      icon.className = 'material-symbols-outlined';
+      icon.style.cursor = 'pointer';
+      icon.textContent = 'delete';
+      icon.addEventListener('click', () => {
+        removeRow(icon);
+      });
+      document.getElementById(iconContainer.id).appendChild(icon);
+      ctr += 1;
+    }
+
+    function loadRowFilters(rowFilters) {
+      console.log(`loadRowFilters called.`);
+      console.dir(rowFilters);
+
+      if (rowFilters) {
+        rowFilters.forEach((filter) => {
+          addRow(filter.column, filter.operator, filter.value);
+        });
+      } else {
+        const criteriaColumn = document.getElementById('sheet-columns').value;
+        const operator = document.getElementById('operators').value;
+        const rowContent = document.getElementById('string-to-comp').value;
+
+        if (criteriaColumn === '' || operator === '') {
+          document.getElementById('error').innerText =
+            'Column and operator values are required';
+        }
+
+        addRow(criteriaColumn, operator, rowContent);
+      }
+    }
+
+    function populateOperators() {
+      const operators = google.script.run
+        .withSuccessHandler((ops) => {
+          console.log(`in populateOperators:`);
+          console.dir(ops);
+
+          const html = [];
+          
+          html.push(`<option value="Select" disabled selected hidden>Select</option>`);
+
+          Object.values(ops).forEach((op) => {
+            html.push(`<option>${op}</option>`);
+          });
+
+          document.getElementById('operators').innerHTML = html.join('');
+        })
+        .getRowFilterOperators();
+    }
+
+    function checkStatus() {
+      const criteriaColumn = document.getElementById('sheet-columns').value;
+      const operator = document.getElementById('operators').value;
+
+      if (criteriaColumn !== '' && operator !== '') {
+        document.getElementById('error').innerText = '';
+      }
+
+      document.getElementById('string-to-comp').disabled = operator === 'Is Empty';
+    }
+
+    function saveSettings() {
+      const table = document.getElementById('added-settings');
+      const rows = table.getElementsByTagName('tr');
+
+      const tableData = [];
+
+      for (let k = 1; k < rows.length; k += 1) {
+        const row = rows[k];
+        const cells = row.getElementsByTagName('td');
+        const rowData = {};
+
+        for (let j = 0; j < cells.length - 1; j += 1) {
+          if (j === 0) {
+            rowData.column = cells[j].innerText;
+          } else if (j === 1) {
+            rowData.operator = cells[j].innerText;
+          } else if (j === 2) {
+            rowData.value = cells[j].innerText;
+          }
+        }
+
+        tableData.push(rowData);
+      }
+
+      console.log(`in saveSettings:`);
+      console.dir(tableData);
+      google.script.run.setRowFiltersFromFrontend(tableData);
+    }
+
+    function init() {
+      google.script.run
+        .withSuccessHandler(populateColumnSelectors)
+        .getDataSourceSheetHeaderNames();
+
+      google.script.run
+        .withSuccessHandler(loadRowFilters)
+        .getRowFiltersForFrontend();
+
+      populateOperators();
+    }
+
+    init(); 
+  </script>
+</html>
+<style>
+  table {
+    table-layout: fixed;
+    width: 100%;
+    padding: 24px 0px;
+  }
+
+  .header-text {
+    width: 30%;
+    text-align: left;
+    padding: 0px 8px;
+  }
+
+  .header-icon {
+    width: 10%;
+    text-align: center;
+  }
+
+  .criteria, .operator-column, .content, .icon-container {
+    padding-left: 8px; 
+    font-size: 14px;
+  }
+
+  span {
+    color: gray;
+  }
+
+  th {
+      text-align: center;
+      background-color: rgb(244, 244, 244);
+      position: relative;
+
+      label {
+        width: 100%
+        color: #ccc;
+        font-size: 12px;
+      }
+  }
+
+  #save {
+      background-color: rgb(42, 93, 234);
+      border: none;
+      box-shadow: none;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: #fff;
+      border-radius: 4px;
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      cursor: pointer;
+    }
+
+  #reset {
+      background-color: #ccc;
+      border: none;
+      box-shadow: none;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: #fff;
+      border-radius: 4px;
+      position: fixed;
+      right: 68px;
+      bottom: 0;
+      cursor: pointer;
+  }
+
+  #add-criteria {
+      background-color: rgb(42, 93, 234);
+      border: none;
+      box-shadow: none;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 2px;
+  }
+
+  html {
+      font-family: 'Inter', Arial, Helvetica, sans-serif;
+  }
+
+  input[type=text] {
+      transition: all 0.2s ease-in-out;
+      outline: none;
+      padding: 3px 0px 3px 3px;
+      margin: 5px 1px 3px 0px;
+      border: 1px solid #DDDDDD;
+      height: 20px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      width: 84%;
+  }
+
+  select {
+      transition: all 0.2s ease-in-out;
+      outline: none;
+      padding: 3px 0px 3px 3px;
+      margin: 5px 1px 3px 0px;
+      border: 1px solid #DDDDDD;
+      height: 20px;
+      padding: 8px 12px;
+      border-radius: 4px;
+  }
+
+  input[type=text]:focus {
+      box-shadow: 0 0 5px rgb(71, 114, 233);
+      margin: 5px 1px 3px 0px;
+      border: 1px solid rgb(71, 114, 233);
+  }
+
+  select[type=text]:focus {
+      box-shadow: 0 0 5px rgb(71, 114, 233);
+      margin: 5px 1px 3px 0px;
+      border: 1px solid rgb(71, 114, 233);
+  }
+
+  .dropdown {
+      height: 36px;
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 4px;
+    }
+  
+  .add {
+    vertical-align: bottom;
+  }
+
+  .button:hover {
+      background-color: rgb(23, 55, 145);
+  }
+
+  .text-field {
+    disabled: true;
+  }
+
+  .c-error {
+    color: rgb(231, 28, 28);
+  }
+
+</style>
